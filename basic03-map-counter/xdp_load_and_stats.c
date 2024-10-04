@@ -67,13 +67,13 @@ int find_map_fd(struct bpf_object *bpf_obj, const char *mapname)
 
 	/* Lesson#3: bpf_object to bpf_map */
 	map = bpf_object__find_map_by_name(bpf_obj, mapname);
-        if (!map) {
+    if (!map) {
 		fprintf(stderr, "ERR: cannot find map by name: %s\n", mapname);
 		goto out;
 	}
 
 	map_fd = bpf_map__fd(map);
- out:
+out:
 	return map_fd;
 }
 
@@ -117,7 +117,7 @@ static void stats_print(struct stats_record *stats_rec,
 {
 	struct record *rec, *prev;
 	double period;
-	__u64 packets;
+	__u64 packets, bytes;
 	double pps; /* packets per sec */
 
 	/* Assignment#2: Print other XDP actions stats  */
@@ -134,9 +134,10 @@ static void stats_print(struct stats_record *stats_rec,
 		       return;
 
 		packets = rec->total.rx_packets - prev->total.rx_packets;
+		bytes   = rec->total.rx_bytes   - prev->total.rx_bytes;
 		pps     = packets / period;
 
-		printf(fmt, action, rec->total.rx_packets, pps, period);
+		printf(fmt, action, rec->total.rx_packets, rec->total.rx_bytes, pps, period);
 	}
 }
 
@@ -181,6 +182,7 @@ static bool map_collect(int fd, __u32 map_type, __u32 key, struct record *rec)
 
 	/* Assignment#1: Add byte counters */
 	rec->total.rx_packets = value.rx_packets;
+	rec->total.rx_bytes   = value.rx_bytes;
 	return true;
 }
 
@@ -190,7 +192,8 @@ static void stats_collect(int map_fd, __u32 map_type,
 	/* Assignment#2: Collect other XDP actions stats  */
 	__u32 key = XDP_PASS;
 
-	map_collect(map_fd, map_type, key, &stats_rec->stats[0]);
+	for (key = 0; key < XDP_ACTION_MAX; key++)
+		map_collect(map_fd, map_type, key, &stats_rec->stats[0]);
 }
 
 static void stats_poll(int map_fd, __u32 map_type, int interval)
