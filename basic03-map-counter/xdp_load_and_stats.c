@@ -118,26 +118,32 @@ static void stats_print(struct stats_record *stats_rec,
 	struct record *rec, *prev;
 	double period;
 	__u64 packets, bytes;
-	double pps; /* packets per sec */
+	double pps, /* packets per sec */
+		   bps; /* bits per sec */
 
 	/* Assignment#2: Print other XDP actions stats  */
+	int i;
+	for (i = 0; i < XDP_ACTION_MAX; i++)
 	{
 		char *fmt = "%-12s %'11lld pkts (%'10.0f pps)"
-			//" %'11lld Kbytes (%'6.0f Mbits/s)"
+			" %'11lld Kbytes (%'6.0f Mbits/s)"
 			" period:%f\n";
-		const char *action = action2str(XDP_PASS);
-		rec  = &stats_rec->stats[0];
-		prev = &stats_prev->stats[0];
+		const char *action = action2str(i);
+		rec  = &stats_rec->stats[i];
+		prev = &stats_prev->stats[i];
 
 		period = calc_period(rec, prev);
 		if (period == 0)
-		       return;
+		    return;
 
 		packets = rec->total.rx_packets - prev->total.rx_packets;
-		bytes   = rec->total.rx_bytes   - prev->total.rx_bytes;
 		pps     = packets / period;
 
-		printf(fmt, action, rec->total.rx_packets, rec->total.rx_bytes, pps, period);
+		bytes   = rec->total.rx_bytes   - prev->total.rx_bytes;
+		bps     = (bytes * 8) / period;
+
+		printf(fmt, action, rec->total.rx_packets, pps,
+									rec->total.rx_bytes / 1000, bps / 1000000, period);
 	}
 }
 
