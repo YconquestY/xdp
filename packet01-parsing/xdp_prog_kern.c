@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#include <linux/in6.h>
 #include <stddef.h>
 #include <linux/bpf.h>
 #include <linux/in.h>
@@ -194,12 +195,12 @@ int  xdp_parser_func(struct xdp_md *ctx)
 	nh_type = parse_ethhdr(&nh, data_end, &eth);
 	if (nh_type == bpf_htons(ETH_P_IP)) {
 		nh_type = parse_iphdr(&nh, data_end, &iph);
-		if (nh_type < 0) {
+		if (nh_type != IPPROTO_ICMP) {
 			goto out;
 		}
 
 		nh_type = parse_icmphdr(&nh, data_end, &icmph);
-		if (nh_type < 0) {
+		if (nh_type != ICMP_ECHO) {
 			goto out;
 		}
 
@@ -208,12 +209,12 @@ int  xdp_parser_func(struct xdp_md *ctx)
 	}
 	else if (nh_type == bpf_htons(ETH_P_IPV6)) {
 		nh_type = parse_ip6hdr(&nh, data_end, &ip6h);
-		if (nh_type < 0) {
+		if (nh_type != IPPROTO_ICMPV6) {
 			goto out;
 		}
 
 		nh_type = parse_icmp6hdr(&nh, data_end, &icmp6h);
-		if (nh_type < 0) {
+		if (nh_type != ICMPV6_ECHO_REQUEST) {
 			goto out;
 		}
 
