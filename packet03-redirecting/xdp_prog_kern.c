@@ -214,10 +214,19 @@ out:
 	return xdp_stats_record_action(ctx, action);
 }
 
+#undef  AF_INET
+#define AF_INET 2
+#undef  AF_INET6
+#define AF_INET6 10
+#define IPV6_FLOWINFO_MASK bpf_htonl(0x0FFFFFFF)
+
 /* from include/net/ip.h */
 static __always_inline int ip_decrease_ttl(struct iphdr *iph)
 {
 	/* Assignment 4: see samples/bpf/xdp_fwd_kern.c from the kernel */
+	__u32 check = iph->check;
+	check += bpf_htons(0x100);
+	iph->check = (__u16) (check + (check >= 0xFFFF));
 	return --iph->ttl;
 }
 
@@ -255,10 +264,18 @@ int xdp_router_func(struct xdp_md *ctx)
 			goto out;
 
 		/* Assignment 4: fill the fib_params structure for the AF_INET case */
+		fib_params.family      = AF_INET;
+		fib_params.tos         = iph->tos;
+		fib_params.l4_protocol = iph->protocol;
+		fib_params.sport       = 0;
+		fib_params.dport       = 0;
+		fib_params.tot_len     = bpf_ntohs(iph->tot_len);
+		fib_params.ipv4_src    = iph->saddr;
+		fib_params.ipv4_dst    = iph->daddr;
 	} else if (h_proto == bpf_htons(ETH_P_IPV6)) {
 		/* These pointers can be used to assign structures instead of executing memcpy: */
-		/* struct in6_addr *src = (struct in6_addr *) fib_params.ipv6_src; */
-		/* struct in6_addr *dst = (struct in6_addr *) fib_params.ipv6_dst; */
+		struct in6_addr *src = (struct in6_addr *) fib_params.ipv6_src;
+		struct in6_addr *dst = (struct in6_addr *) fib_params.ipv6_dst;
 
 		ip6h = data + nh_off;
 		if (ip6h + 1 > data_end) {
@@ -270,6 +287,14 @@ int xdp_router_func(struct xdp_md *ctx)
 			goto out;
 
 		/* Assignment 4: fill the fib_params structure for the AF_INET6 case */
+		fib_params.family      = AF_INET6;
+		fib_params.flowinfo    = *(__be32 *) ip6h & IPV6_FLOWINFO_MASK;
+		fib_params.l4_protocol = ip6h->nexthdr;
+		fib_params.sport       = 0;
+		fib_params.dport       = 0;
+		fib_params.tot_len     = bpf_ntohs(ip6h->payload_len);
+		*src = ip6h->saddr;
+		*dst = ip6h->daddr;
 	} else {
 		goto out;
 	}
@@ -286,9 +311,9 @@ int xdp_router_func(struct xdp_md *ctx)
 
 		/* Assignment 4: fill in the eth destination and source
 		 * addresses and call the bpf_redirect function */
-		/* memcpy(eth->h_dest, ???, ETH_ALEN); */
-		/* memcpy(eth->h_source, ???, ETH_ALEN); */
-		/* action = bpf_redirect(???, 0); */
+		memcpy(eth->h_dest, fib_params.dmac, ETH_ALEN);
+		memcpy(eth->h_source, fib_params.smac, ETH_ALEN);
+		action = bpf_redirect(fib_params.ifindex, 0);
 		break;
 	case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped */
 	case BPF_FIB_LKUP_RET_UNREACHABLE:  /* dest is unreachable; can be dropped */
