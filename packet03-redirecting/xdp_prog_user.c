@@ -50,10 +50,32 @@ static const struct option_wrapper long_options[] = {
 	{{0, 0, NULL,  0 }, NULL, false}
 };
 
+static inline int parse_byte(char* str, unsigned char* byte)
+{
+	unsigned int b = (unsigned int) strtoul(str, 0, 16);
+	if (b > 0xFF)
+		return -1;
+
+	*byte = b;
+	return 0;
+}
+
 static int parse_mac(char *str, unsigned char mac[ETH_ALEN])
 {
 	/* Assignment 3: parse a MAC address in this function and place the
 	 * result in the mac array */
+	if (parse_byte(str, &mac[0]) < 0)
+		return -1;
+	if (parse_byte(str + 3, &mac[1]) < 0)
+		return -1;
+	if (parse_byte(str + 6, &mac[2]) < 0)
+		return -1;
+	if (parse_byte(str + 9, &mac[3]) < 0)
+		return -1;
+	if (parse_byte(str + 12, &mac[4]) < 0)
+		return -1;
+	if (parse_byte(str + 15, &mac[5]) < 0)
+		return -1;
 
 	return 0;
 }
@@ -125,7 +147,11 @@ int main(int argc, char **argv)
 
 
 	/* Assignment 3: open the tx_port map corresponding to the cfg.ifname interface */
-	map_fd = -1;
+	map_fd = open_bpf_map_file(pin_dir, "tx_port", NULL);
+	if (map_fd < 0) {
+		fprintf(stderr, "ERR: cannot open tx_port map file\n");
+		return EXIT_FAILURE;
+	}
 
 	printf("map dir: %s\n", pin_dir);
 
@@ -136,7 +162,11 @@ int main(int argc, char **argv)
 		printf("redirect from ifnum=%d to ifnum=%d\n", cfg.ifindex, cfg.redirect_ifindex);
 
 		/* Assignment 3: open the redirect_params map corresponding to the cfg.ifname interface */
-		map_fd = -1;
+		map_fd = open_bpf_map_file(pin_dir, "redirect_params", NULL);
+		if (map_fd < 0) {
+			fprintf(stderr, "ERR: cannot open redirect_params map file\n");
+			return EXIT_FAILURE;
+		}
 
 		/* Setup the mapping containing MAC addresses */
 		if (write_iface_params(map_fd, src, dest) < 0) {
