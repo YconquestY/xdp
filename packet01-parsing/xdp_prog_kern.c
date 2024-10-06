@@ -100,6 +100,9 @@ static __always_inline int parse_iphdr(struct hdr_cursor* nh,
 		return -1;
 
 	hdrsize = iph->ihl * 4;
+	if (hdrsize < sizeof(struct iphdr))
+		return -1;
+	
 	if (nh->pos + hdrsize > data_end)
 		return -1;
 
