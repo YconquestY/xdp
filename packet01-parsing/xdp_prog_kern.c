@@ -12,10 +12,68 @@
 #include "../common/xdp_stats_kern_user.h"
 #include "../common/xdp_stats_kern.h"
 
+#define VLAN_MAX_DEPTH 4
+
 /* Header cursor to keep track of current parsing position */
 struct hdr_cursor {
 	void *pos;
 };
+
+struct vlan_hdr {
+	__be16 h_vlan_TCI;
+	__be16 h_vlan_encapsulated_proto;
+};
+
+struct vlanids {
+	__u16 ids[VLAN_MAX_DEPTH];
+};
+
+struct vlanids* ids;
+
+static __always_inline int proto_is_vlan(__u16 h_proto) {
+	return !!(h_proto == bpf_htons(ETH_P_8021Q) ||
+		      h_proto == bpf_htons(ETH_P_8021AD));
+}
+
+static __always_inline int parse_vlanhdr(struct hdr_cursor* nh,
+                                         void* data_end,
+										 struct ethhdr** ethhdr,
+										 struct vlanids* ids)
+{
+	struct ethhdr* eth = nh->pos;
+	int hdrsize = sizeof(*eth);
+
+	struct vlan_hdr* vlanh;
+	__u16 h_proto;
+
+	if (nh->pos + hdrsize > data_end)
+		return -1;
+	
+	nh->pos += hdrsize;
+	*ethhdr = eth;
+
+	vlanh = nh->pos;
+	h_proto = eth->h_proto;
+
+	int i,
+		j = 0;
+	#pragma unroll
+	for (i = 0; i < VLAN_MAX_DEPTH; i++)
+	{
+		if (!proto_is_vlan(h_proto))
+			break;
+		
+		if (vlanh + 1 > data_end)
+			break;
+
+		h_proto = vlanh->h_vlan_encapsulated_proto;
+		ids->ids[j++] = vlanh->h_vlan_TCI;
+
+		vlanh++;
+	}
+	nh->pos = vlanh;
+	return h_proto;
+}
 
 /* Packet parsing helpers.
  *
@@ -28,21 +86,8 @@ struct hdr_cursor {
  */
 static __always_inline int parse_ethhdr(struct hdr_cursor *nh,
 					void *data_end,
-					struct ethhdr **ethhdr)
-{
-	struct ethhdr *eth = nh->pos;
-	int hdrsize = sizeof(*eth);
-
-	/* Byte-count bounds check; check if current pointer + size of header
-	 * is after data_end.
-	 */
-	if (nh->pos + hdrsize > data_end)
-		return -1;
-
-	nh->pos += hdrsize;
-	*ethhdr = eth;
-
-	return eth->h_proto; /* network-byte-order */
+					struct ethhdr **ethhdr) {
+	return parse_vlanhdr(nh, data_end, ethhdr, *ids);
 }
 
 /* Assignment 2: Implement and use this */
