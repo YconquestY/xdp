@@ -28,7 +28,7 @@ interface it came from.  This functionality can be used to implement load
 balancers, to send simple ICMP replies, etc.  We will use this functionality in
 the Assignment 1 to implement a simple ICMP echo server.
 
-Note that in order to the transmit and/or redirect functionality to work, *all*
+Note that in order for the transmit and/or redirect functionality to work, *all*
 involved devices should have an attached XDP program, including both veth
 peers.  We have to do this because =veth= devices won't deliver
 redirected/retransmitted XDP frames unless there is an XDP program attached to
