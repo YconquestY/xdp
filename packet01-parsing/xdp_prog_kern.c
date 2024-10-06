@@ -13,6 +13,7 @@
 #include "../common/xdp_stats_kern.h"
 
 #define VLAN_MAX_DEPTH 4
+#define VLAN_VID_MASK  0x0FFF
 
 /* Header cursor to keep track of current parsing position */
 struct hdr_cursor {
@@ -27,8 +28,6 @@ struct vlan_hdr {
 struct vlanids {
 	__u16 ids[VLAN_MAX_DEPTH];
 };
-
-struct vlanids* ids;
 
 static __always_inline int proto_is_vlan(__u16 h_proto) {
 	return !!(h_proto == bpf_htons(ETH_P_8021Q) ||
@@ -55,8 +54,7 @@ static __always_inline int parse_vlanhdr(struct hdr_cursor* nh,
 	vlanh = nh->pos;
 	h_proto = eth->h_proto;
 
-	int i,
-		j = 0;
+	int i;
 	#pragma unroll
 	for (i = 0; i < VLAN_MAX_DEPTH; i++)
 	{
@@ -67,8 +65,9 @@ static __always_inline int parse_vlanhdr(struct hdr_cursor* nh,
 			break;
 
 		h_proto = vlanh->h_vlan_encapsulated_proto;
-		ids->ids[j++] = vlanh->h_vlan_TCI;
-
+		if (ids) {
+			ids->ids[i] = bpf_ntohs(vlanh->h_vlan_TCI) & VLAN_VID_MASK;
+		}
 		vlanh++;
 	}
 	nh->pos = vlanh;
@@ -87,7 +86,7 @@ static __always_inline int parse_vlanhdr(struct hdr_cursor* nh,
 static __always_inline int parse_ethhdr(struct hdr_cursor *nh,
 					void *data_end,
 					struct ethhdr **ethhdr) {
-	return parse_vlanhdr(nh, data_end, ethhdr, *ids);
+	return parse_vlanhdr(nh, data_end, ethhdr, NULL);
 }
 
 /* Assignment 2: Implement and use this */
